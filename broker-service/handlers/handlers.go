@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -9,6 +12,16 @@ import (
 )
 
 type Config struct {}
+
+type RequestPayload struct {
+	Action string `json:"actioin"`
+	Auth AuthPayload `json:"auth,omitempty"`
+}
+
+type AuthPayload struct {
+	Email string `json:"email"`
+	Password string `json:"password"`
+}
 
 func (app *Config) Routes() http.Handler {
 	router := chi.NewRouter()
@@ -24,7 +37,9 @@ func (app *Config) Routes() http.Handler {
 	}))
 
 	router.Use(middleware.Heartbeat("/ping"))
+
 	router.Post("/", app.Broker)
+	router.Post("/handle", app.HandleSubmission)
 
 	return router
 }
@@ -37,3 +52,70 @@ func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
 
 	_ = app.WriteJSON(w, http.StatusOK, payload)
 }
+
+func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
+	var requestPayload RequestPayload
+
+	err := app.ReadJSON(w, r, &requestPayload)
+	if err != nil {
+		app.ErrorJSON(w, err)
+		return
+	}
+
+	switch requestPayload.Action {
+	case "auth":
+		app.Authenticate(w, requestPayload.Auth)
+	default:
+		app.ErrorJSON(w, errors.New("unknown action"))
+	}
+} 
+
+func (app *Config) Authenticate(w http.ResponseWriter, a AuthPayload) {
+	// create some json we'll send to the auth microservice
+	jsonData, _ := json.MarshalIndent(a, "", "\t")
+
+	// call the service
+	request, err := http.NewRequest("POST", "http://authentication-service/authenticate", bytes.NewBuffer(jsonData))
+	if err != nil {
+		app.ErrorJSON(w, err)
+		return
+	}
+
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		app.ErrorJSON(w, err)
+		return
+	}
+	defer response.Body.Close()
+
+	// make sure we get back the correct status code
+	if response.StatusCode == http.StatusUnauthorized {
+		app.ErrorJSON(w, errors.New("invalid credentials"))
+	} else if response.StatusCode != http.StatusAccepted {
+		app.ErrorJSON(w, errors.New("error calling auth service"))
+		return
+	}
+
+	// create a variable we'll read response.Body into
+	var jsonFromService JsonResponse
+
+	// decode the json from the auth service
+	err = json.NewDecoder(response.Body).Decode(&jsonFromService)
+	if err != nil {
+		app.ErrorJSON(w, err)
+		return
+	}
+
+	if jsonFromService.Error {
+		app.ErrorJSON(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	var payload JsonResponse
+	payload.Error = false
+	payload.Message = "Authenticated!"
+	payload.Data = jsonFromService.Data
+
+	app.WriteJSON(w, http.StatusAccepted, payload)
+}  

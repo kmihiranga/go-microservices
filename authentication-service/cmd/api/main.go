@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kmihiranga/authenticatioin/data"
+	handlers "github.com/kmihiranga/authenticatioin/handlers"
 
 	_ "github.com/jackc/pgconn"
 	_ "github.com/jackc/pgx/v4"
@@ -34,7 +35,7 @@ func main() {
 	}
 
 	// set up config
-	app := Config{
+	app := handlers.Config{
 		DB:     conn,
 		Models: data.New(conn),
 	}
