@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/kmihiranga/authenticatioin/data"
@@ -29,6 +30,7 @@ func (app *Config) Authenticate(w http.ResponseWriter, r *http.Request) {
 	user, err := app.Models.User.GetByEmail(requestPayload.Email)
 	if err != nil {
 		app.ErrorJSON(w, errors.New("invalid credentials"), http.StatusBadRequest)
+		log.Fatalln(err)
 		return
 	}
 

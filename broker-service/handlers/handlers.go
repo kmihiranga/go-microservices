@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -14,7 +15,7 @@ import (
 type Config struct {}
 
 type RequestPayload struct {
-	Action string `json:"actioin"`
+	Action string `json:"action"`
 	Auth AuthPayload `json:"auth,omitempty"`
 }
 
@@ -59,6 +60,7 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 	err := app.ReadJSON(w, r, &requestPayload)
 	if err != nil {
 		app.ErrorJSON(w, err)
+		log.Fatalf(err.Error())
 		return
 	}
 
@@ -78,6 +80,7 @@ func (app *Config) Authenticate(w http.ResponseWriter, a AuthPayload) {
 	request, err := http.NewRequest("POST", "http://authentication-service/authenticate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		app.ErrorJSON(w, err)
+		log.Fatalf(err.Error())
 		return
 	}
 
@@ -85,6 +88,7 @@ func (app *Config) Authenticate(w http.ResponseWriter, a AuthPayload) {
 	response, err := client.Do(request)
 	if err != nil {
 		app.ErrorJSON(w, err)
+		log.Fatalf(err.Error())
 		return
 	}
 	defer response.Body.Close()
@@ -94,6 +98,7 @@ func (app *Config) Authenticate(w http.ResponseWriter, a AuthPayload) {
 		app.ErrorJSON(w, errors.New("invalid credentials"))
 	} else if response.StatusCode != http.StatusAccepted {
 		app.ErrorJSON(w, errors.New("error calling auth service"))
+		log.Fatalln(err)
 		return
 	}
 
@@ -104,11 +109,13 @@ func (app *Config) Authenticate(w http.ResponseWriter, a AuthPayload) {
 	err = json.NewDecoder(response.Body).Decode(&jsonFromService)
 	if err != nil {
 		app.ErrorJSON(w, err)
+		log.Fatalf(err.Error())
 		return
 	}
 
 	if jsonFromService.Error {
 		app.ErrorJSON(w, err, http.StatusUnauthorized)
+		log.Fatalf(err.Error())
 		return
 	}
 
